@@ -1,0 +1,2 @@
+amulet-nbt~=2.0
+mutf8>=1.0.6

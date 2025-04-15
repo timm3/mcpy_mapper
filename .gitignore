@@ -1,0 +1,10 @@
+# things used during local development
+extracts/
+mods/
+modloaders/
+saves/
+bundles/
+
+# IDE stuff
+.venv/
+.idea/
