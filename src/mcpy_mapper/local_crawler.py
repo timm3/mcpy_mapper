@@ -59,16 +59,42 @@ def _inspect_manifest(manifest: str) -> dict:
     return data
 
 
-def _inspect_mods_toml(_toml: dict) -> dict:
-    ret: dict[str, list | str | None] = {
-        "modloader_type": None,
-        "modloader_version_range": None,
-        "dependencies": list(),
-        "possible_mc_versions": list(),
-        "possible_mod_versions": list(),
-        "mod_version_range": None,
+def get_version_range(version_range: str) -> dict[str, str | None]:
+    sans_bounds_indicators = version_range.strip("[])( ")
+    bounds = sans_bounds_indicators.split(",")
+    if len(bounds) != 2:
+        raise ValueError(
+            "`version_range` must contain one comma to separate minimum and maximum versions like '[44,45.0.0)'"
+        )
+    return {
+        "minimum": bounds[0].strip() or None,
+        "maximum": bounds[1].strip() or None,
     }
-    raise NotImplementedError()
+
+
+def _inspect_mods_toml(_toml: dict) -> list[dict]:
+    basic_info: dict[str, dict | list | str | None] = {
+        "modloader_type": _toml["modLoader"],
+        "modloader_version_range": get_version_range(_toml["loaderVersion"]),
+        "possible_mc_versions": list(),
+    }
+    mods = []
+    for mod in _toml["mods"]:
+        ret = {
+            "name": mod["modId"],
+        }
+        ret.update(basic_info)
+        ret["possible_mod_versions"] = [mod["version"]]
+        ret["full_name"] = mod["displayName"]
+
+        ret["dependencies"] = {}
+        for dependency in _toml["dependencies"].get(mod["modId"], []):
+            ret["dependencies"][dependency["modId"]] = dependency
+            ret["dependencies"][dependency["modId"]]["versionRange"] = (
+                get_version_range(dependency["versionRange"])
+            )
+        mods.append(ret)
+    return mods
 
 
 def inspect_jar(filepath: pathlib.Path) -> Mod:

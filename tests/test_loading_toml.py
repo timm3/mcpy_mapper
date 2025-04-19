@@ -1,8 +1,35 @@
 import pytest
 
 
+@pytest.mark.parametrize(
+    "version_string,expected_result",
+    [
+        (
+            ",",
+            {"minimum": None, "maximum": None},
+        ),
+        (
+            "[44,)",
+            {"minimum": "44", "maximum": None},
+        ),
+        (
+            ",45",
+            {"minimum": None, "maximum": "45"},
+        ),
+        (
+            "44.0.1,45.0.0",
+            {"minimum": "44.0.1", "maximum": "45.0.0"},
+        ),
+    ],
+)
+def test_get_version_range_with_valid_inputs(version_string, expected_result):
+    from mcpy_mapper.local_crawler import get_version_range
+
+    result = get_version_range(version_string)
+    assert result == expected_result
+
+
 def test_loading_journeymap_5_9_5():
-    # note: 2025-04-14: this has not been tested yet :)
     from mcpy_mapper.local_crawler import _inspect_mods_toml
 
     # setup
@@ -30,28 +57,27 @@ def test_loading_journeymap_5_9_5():
             ]
         },
     }
-    expected_result = dict(
-        name="journeymap",
-        full_name="Journeymap",
-        # path=None,
-        modloader_type="javafml",  # or should it test that it's "forge"?
-        modloader_version_range={"minimum": 44, "maximum": None},
-        dependencies={
-            "forge": {
-                "modId": "forge",
-                "mandatory": True,
-                "versionRange": {"minimum": "44.0.0", "maximum": None},
-            }
-        },
-        possible_mc_versions=None,
-        possible_mod_versions=["5.9.5"],
-        mod_version_range=None,
-    )
+    expected_result = [
+        dict(
+            name="journeymap",
+            full_name="Journeymap",
+            # path=None,
+            modloader_type="javafml",  # or should it test that it's "forge"?
+            modloader_version_range={"minimum": "44", "maximum": None},
+            dependencies={
+                "forge": {
+                    "modId": "forge",
+                    "mandatory": True,
+                    "versionRange": {"minimum": "44.0.0", "maximum": None},
+                }
+            },
+            possible_mc_versions=list(),
+            possible_mod_versions=["5.9.5"],
+        )
+    ]
 
     # test
     result = _inspect_mods_toml(data)
     assert (
         result == expected_result
     )  # TODO: replace this with something that would actually compare the nested dictionaries
-
-    # teardown
