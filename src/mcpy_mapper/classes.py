@@ -16,15 +16,15 @@ class World(object):
 
     def __init__(
         self,
-        directory: pathlib.Path = None,
-        name: str = None,
-        save_path: pathlib.Path = None,  # note: is this even necessary?
-        mc_nbt_version: str = None,
-        mc_version: str = None,
-        is_modded: bool = None,
-        mods: list = None,
-        modloader_name: str = None,
-        modloader_version: str = None,
+        directory: pathlib.Path | None = None,
+        name: str | None = None,
+        save_path: pathlib.Path | None = None,  # note: is this even necessary?
+        mc_nbt_version: str | None = None,
+        mc_version: str | None = None,
+        is_modded: bool | None = None,
+        mods: list | None = None,
+        modloader_name: str | None = None,
+        modloader_version: str | None = None,
     ):
         if directory is not None and any(
             x is not None
@@ -76,6 +76,11 @@ class World(object):
 
 
 class WorldLoader(object):
+    directory: pathlib.Path
+    save_path: pathlib.Path | None
+    engine_info: dict | None
+    mods: list
+
     def __init__(self, directory: pathlib.Path):
         self.directory = directory
         self.save_path = None

@@ -4,6 +4,9 @@ mods/
 modloaders/
 saves/
 bundles/
+.tox/
+src/mcpy_mapper/__pycache__/
+tests/__pycache__/
 
 # IDE stuff
 .venv/

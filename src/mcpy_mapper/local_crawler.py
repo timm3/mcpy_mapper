@@ -8,10 +8,7 @@ import pathlib
 import zipfile
 from dataclasses import dataclass
 
-try:
-    import tomllib as toml
-except ImportError:
-    import toml
+import tomllib
 
 
 @dataclass
@@ -26,7 +23,9 @@ class Mod:
     dependencies: list  # list[Mod]  -- needed to make bundles "complete"
     possible_mc_versions: list[str]
     possible_mod_versions: list[str]
-    mod_version_range: dict  # {"minimum": str, "maximum": str} -- used only when Mod is a dependency-Mod
+    mod_version_range: (
+        dict | None
+    )  # {"minimum": str, "maximum": str} -- used only when Mod is a dependency-Mod
 
 
 def crawl(directory: pathlib.Path) -> list[Mod]:
@@ -37,8 +36,8 @@ def crawl(directory: pathlib.Path) -> list[Mod]:
     # If directory does not have "mods" in the name, it is assumed to be a mod.
     """
     ret = []
-    for dirpath, dirnames, filenames in os.walk(directory, followlinks=True):
-        dirpath = pathlib.Path(dirpath)
+    for dir_str, dirnames, filenames in os.walk(directory, followlinks=True):
+        dirpath = pathlib.Path(dir_str)
 
         # add local jar files
         for filename in filenames:
@@ -53,7 +52,7 @@ def crawl(directory: pathlib.Path) -> list[Mod]:
 
 
 def _inspect_manifest(manifest: str) -> dict:
-    data = {"mod_version": None}
+    data: dict[str, str | None] = {"mod_version": None}
     for line in manifest.splitlines():
         if line.startswith("Implementation-Version"):
             data["mod_version"] = line.split(":")[1].strip()
@@ -61,7 +60,7 @@ def _inspect_manifest(manifest: str) -> dict:
 
 
 def _inspect_mods_toml(_toml: dict) -> dict:
-    ret = {
+    ret: dict[str, list | str | None] = {
         "modloader_type": None,
         "modloader_version_range": None,
         "dependencies": list(),
@@ -69,14 +68,15 @@ def _inspect_mods_toml(_toml: dict) -> dict:
         "possible_mod_versions": list(),
         "mod_version_range": None,
     }
+    raise NotImplementedError()
 
 
 def inspect_jar(filepath: pathlib.Path) -> Mod:
     name = filepath.name  # TODO: actually populate this correctly
     full_name = filepath.name  # TODO: actually populate this correctly
     path = filepath
-    possible_mod_versions = []  # TODO: actually populate this correctly
-    possible_mc_versions = []
+    possible_mod_versions: list[str] = []  # TODO: actually populate this correctly
+    possible_mc_versions: list[str] = []
 
     with zipfile.ZipFile(filepath, "r") as jar:
         manifest_data = None
@@ -88,19 +88,15 @@ def inspect_jar(filepath: pathlib.Path) -> Mod:
         if manifest_data and manifest_data.get("mod_version") is not None:
             possible_mod_versions.append(manifest_data["mod_version"])
 
-        mod_toml_bytes = None
-        mod_toml = None
         try:
             mod_toml_bytes = io.BytesIO(jar.read(jar.getinfo("META-INF/mods.toml")))
         except KeyError:
+            mod_toml_bytes = None
+            mod_toml = None
             print("no META-INF/mods.toml")
-        try:
-            mod_toml = toml.loads(mod_toml_bytes.getvalue().decode())
+        if mod_toml_bytes:
+            mod_toml = tomllib.loads(mod_toml_bytes.getvalue().decode())
             print(mod_toml)
-        except Exception as e:
-            # this is only here to see what exceptions could possibly pop up
-            print("WHAT?!")
-            raise
         if mod_toml:
             _inspect_mods_toml(mod_toml)
 

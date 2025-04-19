@@ -1,0 +1,30 @@
+requires = ["tox>=4"]
+env_list = ["format", "type", "tests", "3.12"]
+
+#[env_run_base]
+#description = "run unit tests"
+#deps = [
+#    "pytest>=8.3.5"
+#]
+#commands = [["pytest", "tests", { replace = "posargs", default = ["tests"], extend = true }]]
+
+[env.format]
+description = "run code formatter"
+skip_install = true
+deps = ["black==25.1.0"]
+commands = [["black", { replace = "posargs", default = ["."], extend = true }]]
+
+[env.type]
+description = "run type checks"
+deps = [
+    "mypy",
+    "pytest>=8.3.5"
+]
+commands = [["mypy", { replace = "posargs", default = ["--no-namespace-packages", "src/mcpy_mapper", "tests"], extend = true }]]
+
+[env.tests]
+description = "run unit tests"
+deps = [
+    "pytest>=8.3.5"
+]
+commands = [["pytest", "tests", { replace = "posargs", default = ["tests"], extend = true }]]

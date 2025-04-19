@@ -6,7 +6,7 @@ import re
 from typing import Any
 
 import amulet_nbt
-import mutf8
+import mutf8  # type: ignore[import-untyped]
 
 WEIRD_VERSION_NUMBER_REGEX = re.compile(r"[@+%{].+[@+%}]")
 
@@ -21,11 +21,11 @@ def save_data(data: dict, save_location: pathlib.Path):
 
 
 def get_world_name(level: amulet_nbt.NamedTag) -> str:
-    return level["Data"]["LevelName"]
+    return level["Data"]["LevelName"]  # type: ignore[index]
 
 
-def get_engine_info(level: amulet_nbt.NamedTag) -> str:
-    ret = {
+def get_engine_info(level: amulet_nbt.NamedTag) -> dict[str, str | None]:
+    ret: dict[str, str | None] = {
         "mc_version": None,
         "mc_version_name": None,
         "mc_data_version": None,
@@ -35,13 +35,13 @@ def get_engine_info(level: amulet_nbt.NamedTag) -> str:
         "mod_data_version": None,
         "mod_player_data_version": None,
     }
-    if "forge" in level.keys():
+    if "forge" in level.keys():  # type: ignore[attr-defined]
         ret["mod_type"] = "forge"
-        ret["mod_data_version"] = level["Data"]["ForgeDataVersion"]["minecraft"]
-        ret["mod_player_data_version"] = level["Data"]["Player"]["ForgeDataVersion"][
+        ret["mod_data_version"] = level["Data"]["ForgeDataVersion"]["minecraft"]  # type: ignore[index]
+        ret["mod_player_data_version"] = level["Data"]["Player"]["ForgeDataVersion"][  # type: ignore[index]
             "minecraft"
         ]
-        for mod in level["FML"]["ModList"]:
+        for mod in level["FML"]["ModList"]:  # type: ignore[index]
             if mod["ModId"] == "minecraft":
                 ret["mc_version_name"] = mod["ModVersion"]
             if mod["ModId"] == "forge":
@@ -50,11 +50,11 @@ def get_engine_info(level: amulet_nbt.NamedTag) -> str:
                 break
     # note: if "forge" not in keys, may need to look through fml mod list (FML.ModList or fml.LoadingModList)
     #   and find the 'forge' mod to get its version
-    elif "fml" in level.keys():
+    elif "fml" in level.keys():  # type: ignore[attr-defined]
         ret["mod_type"] = "forge"
         # note: I don't see anywhere to grab `mod_data_version` or `mod_player_data_version` when using
         #   world "modded createsparkycraft" as an example.
-        for mod in level["fml"]["LoadingModList"]:
+        for mod in level["fml"]["LoadingModList"]:  # type: ignore[index]
             if mod["ModId"] == "minecraft":
                 ret["mc_version_name"] = mod["ModVersion"]
             if mod["ModId"] == "forge":
@@ -65,15 +65,15 @@ def get_engine_info(level: amulet_nbt.NamedTag) -> str:
         # NOTE: this does not handle getting fabric versions yet
         # this works for "Apple Land" which is 1.16.4 but not for "existence.af15" which lacks a lot of other data points as well...
         try:
-            ret["mc_version_name"] = level["Data"]["Version"]["Name"]
+            ret["mc_version_name"] = level["Data"]["Version"]["Name"]  # type: ignore[index]
         except KeyError:
             print(
-                f"could not find minecraft version name for level name: {level["Data"]["LevelName"]}"
+                f"could not find minecraft version name for level name: {level["Data"]["LevelName"]}"  # type: ignore[index]
             )
 
-    ret["mc_version"] = level["Data"]["version"]
+    ret["mc_version"] = level["Data"]["version"]  # type: ignore[index]
     try:
-        ret["mc_data_version"] = level["Data"]["DataVersion"]
+        ret["mc_data_version"] = level["Data"]["DataVersion"]  # type: ignore[index]
     except KeyError:
         # for some reason, a world called "AF15.Existence" or "existence.af15" doesn't have level.Data.DataVersion
         ret["mc_data_version"] = None
@@ -93,7 +93,7 @@ def get_forge_mod_list_v1(
     forge_keys = ["FML", "fml"]
     for forge_key in forge_keys:
         try:
-            level[forge_key]
+            level[forge_key]  # type: ignore[index]
             is_forge = True
             break  # found it! let's keep going
         except KeyError:
@@ -106,7 +106,7 @@ def get_forge_mod_list_v1(
             "version": _mod["ModVersion"].py_str,
             "version_is_weird": _check_for_weird_version(_mod["ModVersion"].py_str),
         }
-        for _mod in level[forge_key].py_dict["ModList"].py_list
+        for _mod in level[forge_key].py_dict["ModList"].py_list  # type: ignore[index]
         if _mod["ModId"].py_str not in skippable
     ]
 
@@ -120,7 +120,7 @@ def get_forge_mod_list(
     forge_keys = ["FML", "fml"]
     for forge_key in forge_keys:
         try:
-            level[forge_key]
+            level[forge_key]  # type: ignore[index]
             is_forge = True
             break  # found it! let's keep going
         except KeyError:
@@ -141,7 +141,7 @@ def get_forge_mod_list(
             "version": _mod["ModVersion"].py_str,
             "version_is_weird": _check_for_weird_version(_mod["ModVersion"].py_str),
         }
-        for _mod in level[forge_key].py_dict[mod_list_key].py_list
+        for _mod in level[forge_key].py_dict[mod_list_key].py_list  # type: ignore[index]
         if _mod["ModId"].py_str not in skippable
     ]
 
@@ -195,7 +195,7 @@ def get_world_save_filepath_v2(world_dir: pathlib.Path) -> pathlib.Path:
     raise FileNotFoundError
 
 
-def load_world(world_directory: pathlib.Path) -> dict:
+def load_world(world_directory: pathlib.Path) -> dict | None:
     try:
         # save_path = get_world_save_filepath(world_directory)
         save_path = get_world_save_filepath_v2(world_directory)

@@ -3,7 +3,7 @@ import pytest
 
 def test_loading_journeymap_5_9_5():
     # note: 2025-04-14: this has not been tested yet :)
-    from src.mcpy_mapper.local_crawler import _inspect_mods_toml
+    from mcpy_mapper.local_crawler import _inspect_mods_toml
 
     # setup
     data = {  # a dict from `tomllib.loads()`

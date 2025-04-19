@@ -7,8 +7,8 @@ This tool aims to simplify the process of setting things up so you can play your
 # Project Requirements
 - python ~= 3.12
   - while 3.12 may not be the minimum version required by imported libraries or the code itself, it is being developed on 3.12
-  - this project uses the `tomllib` library which became a standard library in 3.11 but older python can pip install `toml` instead
 - poetry >= 2.1.2
+- tox >= 4.25.0
 
 # Known Issues
 - does not _yet_ support the `fabric` mod engine/loader
@@ -23,7 +23,7 @@ _in approximate order of importance_
 - [ ] force line-endings for the project
   - via git attributes? though this may be problematic if a need arises for different line-endings in different files...
 - [ ] automated tests
-- [ ] tox to run tests and validation like code formatting & linters
+- [x] tox to run tests and validation like code formatting & linters
 - [ ] pre-commit hooks for linters and automated code formatting
 - [ ] ability to gather and prepare a "mod bundle" with both the mods and the appropriate modloader 
    1. ability to crawl through a directory looking for specific versions of mods and modloaders 
