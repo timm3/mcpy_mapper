@@ -3,18 +3,32 @@ Crawl through local files to better understand them.
 """
 
 import io
+import json
 import os
 import pathlib
+import re
+import tomllib
 import zipfile
 from dataclasses import dataclass
 
-import tomllib
+
+ERROR_LINE_REGEX = re.compile(r"line (\d+)")
+
+
+@dataclass
+class ModLoader:
+    name: str  # todo: is this really needed?
+    family: str  # forge, fabric, etc. -- todo: could probably afford to rename this
+    version: str
+    base_mc_version: str
+    path: pathlib.Path | None  # if None, then not available
 
 
 @dataclass
 class Mod:
     name: str | None
     full_name: str | None
+    possible_names: list[str]
     path: pathlib.Path | None
     modloader_type: str | None
     modloader_version_range: (
@@ -28,34 +42,38 @@ class Mod:
     )  # {"minimum": str, "maximum": str} -- used only when Mod is a dependency-Mod
 
 
-def crawl(directory: pathlib.Path) -> list[Mod]:
+def crawl_mods(directory: pathlib.Path) -> list[Mod]:
     """
     Walks `directory` and subdirectories looking for and categorizing mods.
     # All directories with "mods" in the name (case-insensitive) will be expected to have mods inside them.
     # This is to account for scenario where you've several mod directories for several different modloaders or minecraft versions.
     # If directory does not have "mods" in the name, it is assumed to be a mod.
     """
-    ret = []
+    ret: list[Mod] = []
     for dir_str, dirnames, filenames in os.walk(directory, followlinks=True):
         dirpath = pathlib.Path(dir_str)
 
         # add local jar files
         for filename in filenames:
             if filename.endswith(".jar"):
-                ret.append(inspect_jar(pathlib.Path(dirpath, filename)))
+                ret.extend(inspect_mod_jar(pathlib.Path(dirpath, filename)))
 
         # process other directories
         for dirname in dirnames:
-            ret.extend(crawl(pathlib.Path(dirpath, dirname)))
+            ret.extend(crawl_mods(pathlib.Path(dirpath, dirname)))
 
     return ret
 
 
 def _inspect_manifest(manifest: str) -> dict:
-    data: dict[str, str | None] = {"mod_version": None}
+    data: dict[str, str | list[str] | None] = {"mod_version": None, "names": []}
     for line in manifest.splitlines():
         if line.startswith("Implementation-Version"):
             data["mod_version"] = line.split(":")[1].strip()
+        if line.startswith("Specification-Title") or line.startswith(
+            "Implementation-Title"
+        ):
+            data["names"].append(line.split(":")[1].strip())  # type: ignore[union-attr]
     return data
 
 
@@ -63,6 +81,13 @@ def get_version_range(version_range: str) -> dict[str, str | None]:
     sans_bounds_indicators = version_range.strip("[])( ")
     bounds = sans_bounds_indicators.split(",")
     if len(bounds) != 2:
+        if len(bounds) == 1:
+            # the range is more of a point :P
+            return {
+                "minimum": bounds[0].strip() or None,
+                "maximum": bounds[0].strip() or None,
+            }
+        # too many items!
         raise ValueError(
             "`version_range` must contain one comma to separate minimum and maximum versions like '[44,45.0.0)'"
         )
@@ -88,7 +113,8 @@ def _inspect_mods_toml(_toml: dict) -> list[dict]:
         ret["full_name"] = mod["displayName"]
 
         ret["dependencies"] = {}
-        for dependency in _toml["dependencies"].get(mod["modId"], []):
+        for dependency in _toml.get("dependencies", {}).get(mod["modId"], []):
+            # todo: maybe do Mod instead of a simple dict?
             ret["dependencies"][dependency["modId"]] = dependency
             ret["dependencies"][dependency["modId"]]["versionRange"] = (
                 get_version_range(dependency["versionRange"])
@@ -97,12 +123,41 @@ def _inspect_mods_toml(_toml: dict) -> list[dict]:
     return mods
 
 
-def inspect_jar(filepath: pathlib.Path) -> Mod:
-    name = filepath.name  # TODO: actually populate this correctly
-    full_name = filepath.name  # TODO: actually populate this correctly
-    path = filepath
-    possible_mod_versions: list[str] = []  # TODO: actually populate this correctly
-    possible_mc_versions: list[str] = []
+def _fix_invalid_multiline_string(toml: str, error_message: str) -> str:
+    # todo: support joining together multiline strings that span more than two lines,
+    #  but should that be handled here or by the caller?
+    #  This function's name certainly implies it will handle the whole thing...
+    error_line = int(re.search(ERROR_LINE_REGEX, error_message).group(1))  # type: ignore[union-attr]
+    ret_lines: list[str] = []
+    for idx, line in enumerate(toml.splitlines()):
+        if idx == error_line:
+            ret_lines[-1] = ret_lines[-1].rstrip() + " " + line
+        else:
+            ret_lines.append(line)
+    return "\n".join(ret_lines)
+
+
+def inspect_mod_jar(filepath: pathlib.Path) -> list[Mod]:
+    possible_mod_versions: list[str] = []
+    possible_names: list[str] = []
+
+    def minimal_return():
+        return [
+            Mod(
+                name=min(
+                    possible_names
+                ),  # note: reasonable assumption? can change later
+                full_name="",
+                possible_names=possible_names,
+                path=filepath,
+                modloader_type=None,
+                modloader_version_range=None,
+                dependencies=[],
+                possible_mc_versions=[],
+                possible_mod_versions=possible_mod_versions,
+                mod_version_range=None,
+            )
+        ]
 
     with zipfile.ZipFile(filepath, "r") as jar:
         manifest_data = None
@@ -113,18 +168,46 @@ def inspect_jar(filepath: pathlib.Path) -> Mod:
             print("no META-INF/MANIFEST.MF")
         if manifest_data and manifest_data.get("mod_version") is not None:
             possible_mod_versions.append(manifest_data["mod_version"])
+        if manifest_data and manifest_data.get("possible_names"):
+            possible_names.extend(manifest_data["possible_names"])
 
         try:
             mod_toml_bytes = io.BytesIO(jar.read(jar.getinfo("META-INF/mods.toml")))
         except KeyError:
-            mod_toml_bytes = None
-            mod_toml = None
             print("no META-INF/mods.toml")
-        if mod_toml_bytes:
-            mod_toml = tomllib.loads(mod_toml_bytes.getvalue().decode())
-            print(mod_toml)
-        if mod_toml:
-            _inspect_mods_toml(mod_toml)
+            return minimal_return()
+
+    mod_toml = None
+    if mod_toml_bytes:
+        toml_string = mod_toml_bytes.getvalue().decode().strip()
+        try:
+            mod_toml = tomllib.loads(toml_string)
+        except tomllib.TOMLDecodeError as e:
+            if "'\\n'" in str(e):
+                # note: should probably do this multiple times or some such in case there are multiple multiline strings...
+                toml_string = _fix_invalid_multiline_string(toml_string, str(e))
+                mod_toml = tomllib.loads(toml_string)
+    if not mod_toml:
+        # note 2025-04-20: will this ever happen?
+        return minimal_return()
+
+    ret = []
+    toml_data = _inspect_mods_toml(mod_toml)
+    for data in toml_data:
+        possible_names.append(data["name"])
+        mod = Mod(
+            name=data["name"],
+            full_name=data["full_name"],
+            possible_names=possible_names,
+            path=filepath,
+            modloader_type=data["modloader_type"],
+            modloader_version_range=data["modloader_version_range"],
+            dependencies=data["dependencies"],
+            possible_mc_versions=data["possible_mc_versions"],
+            possible_mod_versions=data["possible_mod_versions"],
+            mod_version_range=None,
+        )
+        ret.append(mod)
 
     ##
     # look at:
@@ -154,22 +237,53 @@ def inspect_jar(filepath: pathlib.Path) -> Mod:
     # - META-INF/MANIFEST.MF -> does not have mod's version
     ##
 
-    return Mod(
-        name=filepath.name,  # TODO: actually populate this correctly
-        full_name=filepath.name,  # TODO: actually populate this correctly
-        path=filepath,
-        modloader_type=None,  # TODO: actually populate this correctly
-        modloader_version_range=None,  # TODO: actually populate this correctly
-        dependencies=[],  # TODO: actually populate this correctly
-        possible_mc_versions=[],  # TODO: actually populate this correctly
-        possible_mod_versions=[],  # TODO: actually populate this correctly
-        mod_version_range=None,  # TODO: actually populate this correctly
-    )
+    return ret
 
 
-def main():
-    crawl(pathlib.Path("/path/to/folder/of/mods"))
+def inspect_modloader_jar(filepath: pathlib.Path) -> ModLoader | None:
+    with zipfile.ZipFile(filepath, "r") as jar:
+        manifest = jar.read(jar.getinfo("META-INF/MANIFEST.MF"))
+
+        is_forge = False
+        for line in manifest.decode().splitlines():
+            if "forge" in line.lower():
+                # probably good enough :)
+                is_forge = True
+                break
+        if not is_forge:
+            return None  # todo: or should an empty ModLoader be returned?
+
+        install_profile = json.loads(
+            jar.read(jar.getinfo("install_profile.json")).decode()
+        )
+        top_level_version = json.loads(jar.read(jar.getinfo("version.json")).decode())
+
+        return ModLoader(
+            name=top_level_version["id"],
+            family=install_profile["profile"],
+            version=install_profile["version"],  # or...? top_level_version["id"]
+            base_mc_version=top_level_version["inheritsFrom"],
+            path=filepath,
+        )
 
 
-if __name__ == "__main__":
-    main()
+def crawl_modloaders(directory: pathlib.Path) -> list[ModLoader]:
+    """
+    Crawl through a directory to discover modloaders.
+    """
+    ret: list[ModLoader] = []
+    for dir_str, dirnames, filenames in os.walk(directory, followlinks=True):
+        dirpath = pathlib.Path(dir_str)
+
+        # add local jar files
+        for filename in filenames:
+            if filename.endswith(".jar"):
+                modloader = inspect_modloader_jar(pathlib.Path(dirpath, filename))
+                if modloader:
+                    ret.append(modloader)
+
+        # process other directories
+        for dirname in dirnames:
+            ret.extend(crawl_modloaders(pathlib.Path(dirpath, dirname)))
+
+    return ret
