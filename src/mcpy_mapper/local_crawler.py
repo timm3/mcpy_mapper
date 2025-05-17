@@ -61,19 +61,21 @@ def crawl_mods(directory: pathlib.Path) -> list[Mod]:
         # process other directories
         for dirname in dirnames:
             ret.extend(crawl_mods(pathlib.Path(dirpath, dirname)))
-
     return ret
 
 
 def _inspect_manifest(manifest: str) -> dict:
-    data: dict[str, str | list[str] | None] = {"mod_version": None, "names": []}
+    data: dict[str, str | list[str] | None] = {
+        "mod_version": None,
+        "possible_names": [],
+    }
     for line in manifest.splitlines():
         if line.startswith("Implementation-Version"):
             data["mod_version"] = line.split(":")[1].strip()
         if line.startswith("Specification-Title") or line.startswith(
             "Implementation-Title"
         ):
-            data["names"].append(line.split(":")[1].strip())  # type: ignore[union-attr]
+            data["possible_names"].append(line.split(":")[1].strip())  # type: ignore[union-attr]
     return data
 
 
@@ -145,7 +147,7 @@ def inspect_mod_jar(filepath: pathlib.Path) -> list[Mod]:
         return [
             Mod(
                 name=min(
-                    possible_names
+                    possible_names or [""]
                 ),  # note: reasonable assumption? can change later
                 full_name="",
                 possible_names=possible_names,
@@ -194,7 +196,17 @@ def inspect_mod_jar(filepath: pathlib.Path) -> list[Mod]:
     ret = []
     toml_data = _inspect_mods_toml(mod_toml)
     for data in toml_data:
+        # todo: handle multi-mod mods better.
+        #  Some mods like "curios" version 1.19.2-5.1.3.0
+        #  incorrectly list their version in the mod declared
+        #  in `toml_data` but have the correct value in their
+        #  manifest data.
+        #  The problem is... knowing when and what to include
+        #  of these toml_data mod declarations for both
+        #  `possible_names` and `possible_mod_versions`.
         possible_names.append(data["name"])
+        if data["name"] in possible_names:
+            possible_mod_versions.extend(data["possible_mod_versions"])
         mod = Mod(
             name=data["name"],
             full_name=data["full_name"],
@@ -204,7 +216,7 @@ def inspect_mod_jar(filepath: pathlib.Path) -> list[Mod]:
             modloader_version_range=data["modloader_version_range"],
             dependencies=data["dependencies"],
             possible_mc_versions=data["possible_mc_versions"],
-            possible_mod_versions=data["possible_mod_versions"],
+            possible_mod_versions=possible_mod_versions,  # or should it be `data["possible_mod_versions"]`? I really wasn't expecting a single mod file to have multiple mods...
             mod_version_range=None,
         )
         ret.append(mod)

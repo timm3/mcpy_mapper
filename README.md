@@ -22,15 +22,26 @@ _in approximate order of importance_
 - [x] ability to extract modloader version and list of mods (and their versions)
 - [ ] force line-endings for the project
   - via git attributes? though this may be problematic if a need arises for different line-endings in different files...
-- [ ] automated tests
+- [ ] ability to save/load data about mods & modloaders from one file so we don't have to read a bajillion files every time the script runs
+- [ ] suppress or obviate DeprecationWarning and FutureWarning warnings raised by `amulet_nbt` / `amulet-nbt`
+  - suppressed by default but a verbosity flag could cause it to not be
+  - the current warnings are mostly from two actions involving `NamedTag` (and `IntTag`?) objects
+     1. using `__getitem__` (as in `my_named_tag[some_key]`)
+     2. equality comparisons with strings (e.g. `my_named_tag == "1.44.32"`)
+- [x] automated tests
+- [ ] MORE automated tests
+- [ ] this is a "maybe", but... move the "load world data" collection of functions out of `main.py`
 - [x] tox to run tests and validation like code formatting & linters
 - [ ] pre-commit hooks for linters and automated code formatting
+  - this exists in `tox`, so... is that sufficient?
 - [ ] ability to gather and prepare a "mod bundle" with both the mods and the appropriate modloader 
    1. ability to crawl through a directory looking for specific versions of mods and modloaders 
       1. to reduce or even avoid network usage
    2. ability to retrieve mods and modloaders from web
    3. ideally, one would be able to do this for more than one world at a time
-      1. where possible, "reuse" a "mod bundle" if two worlds have the same requirements 
+      1. where possible, "reuse" a "mod bundle" if two worlds have the same requirements
+- [ ] ability to fetch modloaders from the internet
+  - at least for forge, they request that one makes a monetary donation to their cause if automating the download since they are primarily funded by ads
 - [ ] print out what's going on as the tools do their thing
    1. with a flag/option to control verbosity
 - [ ] support the `fabric` modloader and mods

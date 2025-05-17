@@ -8,6 +8,10 @@ from typing import Any
 import amulet_nbt
 import mutf8  # type: ignore[import-untyped]
 
+from .local_crawler import crawl_modloaders, crawl_mods
+from .organize import make_bundle
+
+
 WEIRD_VERSION_NUMBER_REGEX = re.compile(r"[@+%{].+[@+%}]")
 
 
@@ -21,10 +25,12 @@ def save_data(data: dict, save_location: pathlib.Path):
 
 
 def get_world_name(level: amulet_nbt.NamedTag) -> str:
+    # TODO: convert the returned value from StringTag / IntTag object to str
     return level["Data"]["LevelName"]  # type: ignore[index]
 
 
 def get_engine_info(level: amulet_nbt.NamedTag) -> dict[str, str | None]:
+    # TODO: convert all the StringTag and IntTag objects in returned object to str/int as appropriate
     ret: dict[str, str | None] = {
         "mc_version": None,
         "mc_version_name": None,
@@ -82,33 +88,6 @@ def get_engine_info(level: amulet_nbt.NamedTag) -> dict[str, str | None]:
 
 def _check_for_weird_version(version: str) -> bool:
     return re.search(WEIRD_VERSION_NUMBER_REGEX, version) is not None
-
-
-def get_forge_mod_list_v1(
-    level: amulet_nbt.NamedTag,
-) -> list[Any] | list[dict[str, bool | Any]]:
-    skippable = ["minecraft", "forge"]
-    is_forge = False  # todo: do something with this :)
-
-    forge_keys = ["FML", "fml"]
-    for forge_key in forge_keys:
-        try:
-            level[forge_key]  # type: ignore[index]
-            is_forge = True
-            break  # found it! let's keep going
-        except KeyError:
-            pass
-    # TODO: support fabric mods/engine -- might be able to check "modded either way" using "if len(keys) > 1" or "if more keys than just 'Data'"?
-
-    return [
-        {
-            "name": _mod["ModId"].py_str,
-            "version": _mod["ModVersion"].py_str,
-            "version_is_weird": _check_for_weird_version(_mod["ModVersion"].py_str),
-        }
-        for _mod in level[forge_key].py_dict["ModList"].py_list  # type: ignore[index]
-        if _mod["ModId"].py_str not in skippable
-    ]
 
 
 def get_forge_mod_list(
@@ -259,6 +238,30 @@ def get_arg_parser() -> argparse.ArgumentParser:
             "inside the --save directory."
         ),
     )
+
+    parser.add_argument(
+        "--mods-directory",
+        type=_change_many_worlds_arg_to_pathlib_path,
+        help="Directory to recursively crawl to discover mods. Optional.",
+    )
+
+    parser.add_argument(
+        "--loaders-directory",
+        type=_change_many_worlds_arg_to_pathlib_path,
+        help="Directory to recursively crawl to discover modloaders. Optional.",
+    )
+
+    parser.add_argument(
+        "--bundles-directory",
+        type=_change_many_worlds_arg_to_pathlib_path,
+        help=(
+            "Directory where bundle directories will be stored. "
+            "Optional. If not provided, bundle will not be created. "
+            "If provided, directories and files will be created (or overwritten) using world's directory's name "
+            "inside the --bundle-directory. These files will include notes about which mods and modloaders "
+            "are included and which aren't."
+        ),
+    )
     return parser
 
 
@@ -273,6 +276,15 @@ def main():
                 pathlib.Path(dirpath).joinpath(dir_name) for dir_name in dirnames
             ]
             break  # only want to work with first iteration
+
+    known_mods = []
+    if args.mods_directory:
+        known_mods = crawl_mods(args.mods_directory)
+
+    modloaders = []
+    if args.loaders_directory:
+        modloaders = crawl_modloaders(args.loaders_directory)
+
     for world_dir in world_directories:
         data = load_world(world_dir)
         if data is None:
@@ -282,6 +294,14 @@ def main():
             save_data(data, args.save.joinpath(world_dir.name + ".json"))
         else:
             make_some_noise(data)
+        if args.bundles_directory:
+            make_bundle(
+                world_data=data,
+                known_mods=known_mods,
+                known_modloaders=modloaders,
+                bundles_directory=args.bundles_directory,
+                bundle_name=world_dir.name,  # note: could also try `str(data["world_name"])` or some such
+            )
 
 
 if __name__ == "__main__":
